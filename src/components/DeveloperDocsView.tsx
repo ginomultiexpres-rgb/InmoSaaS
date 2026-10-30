@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { 
   SUPABASE_SQL_SCHEMA, 
+  SUPABASE_SEED_SQL,
   NEXTJS_FOLDER_STRUCTURE, 
   CODE_DASHBOARD_PAGE, 
   CODE_PUBLIC_AGENT_PAGE 
 } from '../data/schemaAndCode';
-import { Database, FolderTree, LayoutDashboard, Globe, Copy, Check, Terminal, ShieldCheck } from 'lucide-react';
+import { Database, FolderTree, LayoutDashboard, Globe, Copy, Check, Terminal, ShieldCheck, Sparkles, ExternalLink } from 'lucide-react';
 
 export const DeveloperDocsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'sql' | 'structure' | 'dashboard' | 'public_page' | 'multi_tenant_guide'>('sql');
+  const [activeTab, setActiveTab] = useState<'seed_sql' | 'sql' | 'structure' | 'dashboard' | 'public_page' | 'multi_tenant_guide'>('seed_sql');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const handleCopy = (text: string, key: string) => {
@@ -33,20 +34,37 @@ export const DeveloperDocsView: React.FC = () => {
             Esquema Supabase SQL & Código Next.js 15 (App Router)
           </h1>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            Documentación técnica y código fuente listo para copiar a tu repositorio con aislamiento multi-tenant y Row Level Security (RLS).
+            Documentación técnica, script de datos de prueba en Arequipa y código fuente con aislamiento multi-tenant y Row Level Security (RLS).
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCD00]/20 text-[#FFCD00] border border-[#FFCD00]/40 rounded-xl text-xs font-bold">
-            <ShieldCheck className="w-4 h-4 text-[#FFCD00]" />
-            <span>RLS PostgreSQL Habilitado</span>
-          </div>
+          <a
+            href="https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCD00] text-[#0A192F] hover:bg-[#E6B800] rounded-xl text-xs font-black transition shadow-md"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span>Abrir Supabase SQL Editor</span>
+          </a>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200/80 overflow-x-auto pb-px">
+        <button
+          onClick={() => setActiveTab('seed_sql')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'seed_sql'
+              ? 'border-[#FFCD00] text-[#0A192F] bg-white rounded-t-xl shadow-xs'
+              : 'border-transparent text-slate-600 hover:text-[#0A192F] hover:border-slate-300'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-[#FFCD00]" />
+          <span>⭐ Datos de Prueba (Seed SQL Arequipa)</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('sql')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
@@ -56,7 +74,7 @@ export const DeveloperDocsView: React.FC = () => {
           }`}
         >
           <Database className="w-4 h-4 text-[#0A192F]" />
-          <span>1. Esquema SQL Supabase con RLS</span>
+          <span>1. Esquema DDL Tablas y RLS</span>
         </button>
 
         <button
@@ -107,6 +125,61 @@ export const DeveloperDocsView: React.FC = () => {
           <span>5. Conexión Supabase SSR & Auth</span>
         </button>
       </div>
+
+      {/* Tab Content 0: Seed Data SQL */}
+      {activeTab === 'seed_sql' && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs space-y-4">
+          <div className="p-5 bg-[#0A192F] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-[#FFCD00] text-[#0A192F] text-[10px] font-black uppercase px-2 py-0.5 rounded">
+                  Recomendado para Iniciar
+                </span>
+                <span className="text-xs text-slate-300">Arequipa · PEN S/.</span>
+              </div>
+              <h3 className="text-sm font-black text-white mt-1">
+                Script SQL de Datos de Prueba + Permisos RLS
+              </h3>
+              <p className="text-xs text-slate-300">
+                Añade columnas faltantes, configura permisos y siembra agentes, propiedades en Cayma/Yanahuara, prospectos y citas.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href="https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white rounded-xl transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Abrir SQL Editor</span>
+              </a>
+              <button
+                onClick={() => handleCopy(SUPABASE_SEED_SQL, 'seed_sql')}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-black bg-[#FFCD00] hover:bg-[#E6B800] text-[#0A192F] rounded-xl transition shadow-md cursor-pointer"
+              >
+                {copiedKey === 'seed_sql' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-800" />
+                    <span className="text-emerald-900">¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar Script SQL</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 overflow-x-auto">
+            <pre className="text-xs font-mono text-slate-100 leading-relaxed bg-[#0A192F] p-5 rounded-xl overflow-x-auto max-h-[500px]">
+              <code>{SUPABASE_SEED_SQL}</code>
+            </pre>
+          </div>
+        </div>
+      )}
 
       {/* Tab Content 1: SQL Schema */}
       {activeTab === 'sql' && (

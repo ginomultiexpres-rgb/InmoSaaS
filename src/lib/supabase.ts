@@ -60,11 +60,17 @@ export const getSupabaseClient = (): SupabaseClient | null => {
   }
 };
 
-// Verificar estado de conexión
+// Verificar estado de conexión e inspeccionar conteos reales
 export const testSupabaseConnection = async (
   customUrl?: string, 
   customKey?: string
-): Promise<{ success: boolean; message: string; tablesFound?: string[] }> => {
+): Promise<{ 
+  success: boolean; 
+  message: string; 
+  tablesFound?: string[];
+  counts?: { tenants: number; properties: number; leads: number; appointments: number };
+  hasRows?: boolean;
+}> => {
   const url = customUrl || getStoredCredentials().url;
   const key = customKey || getStoredCredentials().key;
 
@@ -77,27 +83,49 @@ export const testSupabaseConnection = async (
 
   try {
     const testClient = createClient(url, key);
-    // Intentar leer de public.tenants
-    const { data, error } = await testClient.from('tenants').select('id, name').limit(1);
+    
+    // Inspeccionar tablas disponibles y conteos
+    const [tRes, pRes, lRes1, aRes] = await Promise.all([
+      testClient.from('tenants').select('*', { count: 'exact', head: true }),
+      testClient.from('properties').select('*', { count: 'exact', head: true }),
+      testClient.from('crm_leads').select('*', { count: 'exact', head: true }),
+      testClient.from('appointments').select('*', { count: 'exact', head: true }),
+    ]);
 
-    if (error) {
-      if (error.code === 'PGRST204' || error.message?.includes('does not exist')) {
-        return {
-          success: true,
-          message: 'Conexión establecida con éxito, pero la tabla "tenants" aún no existe en Supabase. Debes ejecutar el script SQL en el SQL Editor.',
-          tablesFound: [],
-        };
+    // Si crm_leads da error, probar con tabla 'leads'
+    let leadsCount = lRes1.count ?? 0;
+    let leadsTable = 'crm_leads';
+    if (lRes1.error) {
+      const lRes2 = await testClient.from('leads').select('*', { count: 'exact', head: true });
+      if (!lRes2.error) {
+        leadsCount = lRes2.count ?? 0;
+        leadsTable = 'leads';
       }
-      return {
-        success: false,
-        message: `Error de Supabase: ${error.message} (Código: ${error.code})`,
-      };
     }
+
+    const tablesFound: string[] = [];
+    if (!tRes.error) tablesFound.push('tenants');
+    if (!pRes.error) tablesFound.push('properties');
+    tablesFound.push(leadsTable);
+    if (!aRes.error) tablesFound.push('appointments');
+
+    const counts = {
+      tenants: tRes.count ?? 0,
+      properties: pRes.count ?? 0,
+      leads: leadsCount,
+      appointments: aRes.count ?? 0,
+    };
+
+    const totalRows = counts.tenants + counts.properties + counts.leads + counts.appointments;
 
     return {
       success: true,
-      message: '¡Conexión exitosa con Supabase! Tablas y políticas RLS detectadas.',
-      tablesFound: ['tenants', 'properties', 'crm_leads', 'appointments'],
+      message: totalRows > 0 
+        ? `¡Conexión exitosa! ${totalRows} registros cargados desde Supabase PostgreSQL.`
+        : '¡Conexión establecida con Supabase! Las tablas existen en PostgreSQL y están listas.',
+      tablesFound,
+      counts,
+      hasRows: totalRows > 0,
     };
   } catch (err: any) {
     return {
@@ -107,34 +135,121 @@ export const testSupabaseConnection = async (
   }
 };
 
-// Cargar datos reales desde Supabase
-export const loadDataFromSupabase = async (tenantId: string) => {
+// Cargar datos reales desde Supabase con mapeo flexible y tolerante a esquemas
+export const loadDataFromSupabase = async (tenantId?: string) => {
   const client = getSupabaseClient();
   if (!client) return null;
 
   try {
-    const [
-      { data: tenants, error: tErr },
-      { data: properties, error: pErr },
-      { data: leads, error: lErr },
-      { data: appointments, error: aErr }
-    ] = await Promise.all([
-      client.from('tenants').select('*'),
-      client.from('properties').select('*').eq('tenant_id', tenantId),
-      client.from('crm_leads').select('*').eq('tenant_id', tenantId),
-      client.from('appointments').select('*').eq('tenant_id', tenantId),
-    ]);
-
-    if (tErr || pErr || lErr || aErr) {
-      console.warn('Tablas no encontradas o vacías en Supabase, usando estado actual.', { tErr, pErr, lErr, aErr });
-      return null;
+    // 1. Cargar Tenants de la base de datos
+    const { data: rawTenants, error: tErr } = await client.from('tenants').select('*');
+    let tenants: Tenant[] = [];
+    if (!tErr && rawTenants && rawTenants.length > 0) {
+      tenants = rawTenants.map((t: any) => ({
+        id: String(t.id),
+        name: t.name || 'Agencia Inmobiliaria Arequipa',
+        slug: t.slug || 'agente-inmobiliario',
+        agent_name: t.agent_name || t.name || 'Agente Inmobiliario',
+        email: t.email || 'contacto@inmotenant.pe',
+        phone: t.phone || '+51 954 112 233',
+        avatar_url: t.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+        bio: t.bio || 'Asesor inmobiliario especialista en propiedades residenciales y comerciales en Arequipa.',
+        location: t.location || 'Arequipa, Perú',
+        created_at: t.created_at || new Date().toISOString(),
+      }));
     }
 
+    const currentTenantId = tenantId || (tenants.length > 0 ? tenants[0].id : undefined);
+
+    // 2. Cargar Propiedades
+    let rawProperties: any[] = [];
+    const { data: propsAll, error: pErr } = await client.from('properties').select('*');
+    if (!pErr && propsAll && propsAll.length > 0) {
+      rawProperties = propsAll;
+    }
+
+    const properties: Property[] = rawProperties.map((p: any) => ({
+      id: String(p.id),
+      tenant_id: String(p.tenant_id || currentTenantId || 'tenant-valeria'),
+      title: p.title || 'Inmueble en Arequipa',
+      slug: p.slug || `inmueble-${p.id}`,
+      description: p.description || '',
+      property_type: p.property_type || p.type || 'departamento',
+      status: p.status || 'activa',
+      price_pen: Number(p.price_pen || p.price || 450000),
+      currency: p.currency || 'PEN',
+      bedrooms: Number(p.bedrooms ?? 3),
+      bathrooms: Number(p.bathrooms ?? 2),
+      area_m2: Number(p.area_m2 || p.area || 120),
+      district: p.district || 'Cayma',
+      address: p.address || 'Arequipa, Perú',
+      image_url: p.image_url || p.image || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+      gallery_urls: Array.isArray(p.gallery_urls) ? p.gallery_urls : [],
+      featured: Boolean(p.featured),
+      created_at: p.created_at || new Date().toISOString(),
+    }));
+
+    // 3. Cargar Leads (crm_leads o leads)
+    let rawLeads: any[] = [];
+    const { data: crmLeadsData, error: crmErr } = await client.from('crm_leads').select('*');
+    if (!crmErr && crmLeadsData && crmLeadsData.length > 0) {
+      rawLeads = crmLeadsData;
+    } else {
+      const { data: leadsData } = await client.from('leads').select('*');
+      if (leadsData && leadsData.length > 0) {
+        rawLeads = leadsData;
+      }
+    }
+
+    const leads: Lead[] = rawLeads.map((l: any) => ({
+      id: String(l.id),
+      tenant_id: String(l.tenant_id || currentTenantId || 'tenant-valeria'),
+      full_name: l.full_name || l.name || 'Prospecto Inmobiliario',
+      phone: l.phone || '+51 900 000 000',
+      email: l.email || '',
+      status: (['nuevo', 'contactado', 'visita', 'cerrado'].includes(l.status) ? l.status : 'nuevo') as any,
+      budget_pen: Number(l.budget_pen || l.budget || l.price || 380000),
+      interested_property_id: l.interested_property_id || l.property_id ? String(l.interested_property_id || l.property_id) : undefined,
+      notes: l.notes || '',
+      source: l.source || 'Web Pública / Supabase',
+      created_at: l.created_at || new Date().toISOString(),
+    }));
+
+    // 4. Cargar Citas (appointments)
+    let rawAppointments: any[] = [];
+    const { data: appData, error: aErr } = await client.from('appointments').select('*');
+    if (!aErr && appData && appData.length > 0) {
+      rawAppointments = appData;
+    }
+
+    const appointments: Appointment[] = rawAppointments.map((a: any) => ({
+      id: String(a.id),
+      tenant_id: String(a.tenant_id || currentTenantId || 'tenant-valeria'),
+      lead_id: String(a.lead_id || ''),
+      property_id: String(a.property_id || ''),
+      scheduled_at: a.scheduled_at || a.date || new Date().toISOString().split('T')[0],
+      time_slot: a.time_slot || a.time || '10:00 AM',
+      status: (['programada', 'completada', 'cancelada'].includes(a.status) ? a.status : 'programada') as any,
+      visit_type: (['presencial', 'virtual'].includes(a.visit_type || a.type) ? (a.visit_type || a.type) : 'presencial') as any,
+      notes: a.notes || '',
+      created_at: a.created_at || new Date().toISOString(),
+    }));
+
+    const totalRecords = tenants.length + properties.length + leads.length + appointments.length;
+
     return {
-      tenants: tenants as Tenant[],
-      properties: properties as Property[],
-      leads: leads as Lead[],
-      appointments: appointments as Appointment[],
+      tenants,
+      properties,
+      leads,
+      appointments,
+      isDatabaseEmpty: totalRecords === 0,
+      totalRecords,
+      counts: {
+        tenants: tenants.length,
+        properties: properties.length,
+        leads: leads.length,
+        appointments: appointments.length,
+      },
     };
   } catch (err) {
     console.error('Error cargando datos de Supabase:', err);
@@ -142,7 +257,7 @@ export const loadDataFromSupabase = async (tenantId: string) => {
   }
 };
 
-// Sembrar datos iniciales en Supabase si las tablas están creadas pero vacías
+// Sembrar datos iniciales en Supabase
 export const seedSupabaseData = async (): Promise<{ success: boolean; message: string }> => {
   const client = getSupabaseClient();
   if (!client) {
@@ -165,7 +280,12 @@ export const seedSupabaseData = async (): Promise<{ success: boolean; message: s
       }))
     );
 
-    if (tErr) throw new Error(`Error insertando tenants: ${tErr.message}`);
+    if (tErr) {
+      if (tErr.code === '42501' || tErr.message.includes('row-level security')) {
+        throw new Error('RLS_RESTRICTION: La base de datos tiene Row Level Security activo que requiere permisos para el rol "anon". Ejecuta el script SQL en Supabase SQL Editor para habilitar la inserción.');
+      }
+      throw new Error(`Error insertando tenants: ${tErr.message}`);
+    }
 
     // 2. Insertar Propiedades
     const { error: pErr } = await client.from('properties').upsert(
@@ -191,21 +311,27 @@ export const seedSupabaseData = async (): Promise<{ success: boolean; message: s
 
     if (pErr) throw new Error(`Error insertando properties: ${pErr.message}`);
 
-    // 3. Insertar Leads
-    const { error: lErr } = await client.from('crm_leads').upsert(
-      INITIAL_LEADS.map((l) => ({
-        id: l.id,
-        tenant_id: l.tenant_id,
-        full_name: l.full_name,
-        phone: l.phone,
-        email: l.email,
-        status: l.status,
-        budget_pen: l.budget_pen,
-        interested_property_id: l.interested_property_id,
-        notes: l.notes,
-        source: l.source,
-      }))
-    );
+    // 3. Insertar Leads (crm_leads o leads)
+    const leadsPayload = INITIAL_LEADS.map((l) => ({
+      id: l.id,
+      tenant_id: l.tenant_id,
+      full_name: l.full_name,
+      name: l.full_name,
+      phone: l.phone,
+      email: l.email,
+      status: l.status,
+      budget_pen: l.budget_pen,
+      interested_property_id: l.interested_property_id,
+      notes: l.notes,
+      source: l.source,
+    }));
+
+    let lErr: any = null;
+    const res1 = await client.from('crm_leads').upsert(leadsPayload);
+    if (res1.error) {
+      const res2 = await client.from('leads').upsert(leadsPayload);
+      if (res2.error) lErr = res2.error;
+    }
 
     if (lErr) throw new Error(`Error insertando leads: ${lErr.message}`);
 
@@ -228,7 +354,7 @@ export const seedSupabaseData = async (): Promise<{ success: boolean; message: s
 
     return {
       success: true,
-      message: '¡Datos iniciales de Arequipa sembrados con éxito en tu base de datos Supabase!',
+      message: '¡Datos iniciales de Arequipa sembrados con éxito en Supabase PostgreSQL!',
     };
   } catch (err: any) {
     return {

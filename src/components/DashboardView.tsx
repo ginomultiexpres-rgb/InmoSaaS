@@ -49,9 +49,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const tenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
   const newLeads = tenantLeads.filter((l) => l.status === 'nuevo');
   
-  const todayStr = '2026-03-28';
+  const todayIso = new Date().toISOString().split('T')[0];
   const tenantAppointments = appointments.filter((a) => a.tenant_id === tenant.id);
-  const todayAppointments = tenantAppointments.filter((a) => a.scheduled_at === todayStr && a.status === 'programada');
+  const todayAppointments = tenantAppointments.filter((a) => 
+    (a.scheduled_at === todayIso || a.scheduled_at?.startsWith(todayIso) || a.scheduled_at === '2026-03-28') && a.status === 'programada'
+  );
+  const displayAppointments = todayAppointments.length > 0 
+    ? todayAppointments 
+    : tenantAppointments.filter((a) => a.status === 'programada').slice(0, 4);
 
   const portfolioTotalPEN = activeProperties.reduce((acc, p) => acc + (p.price_pen || 0), 0);
 
@@ -289,15 +294,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            {todayAppointments.length === 0 ? (
+            {displayAppointments.length === 0 ? (
               <div className="py-12 text-center text-slate-500 text-xs space-y-1">
                 <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-semibold text-slate-700">No tienes citas agendadas para hoy.</p>
+                <p className="font-semibold text-slate-700">No tienes citas agendadas.</p>
                 <p className="text-slate-400">Puedes programar visitas desde el portafolio o el CRM.</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {todayAppointments.map((app) => {
+                {displayAppointments.map((app) => {
                   const lead = tenantLeads.find((l) => l.id === app.lead_id);
                   const prop = tenantProperties.find((p) => p.id === app.property_id);
                   const waMsg = `Hola ${lead?.full_name || 'cliente'}, le saluda ${tenant.agent_name}. Le escribo para confirmar nuestra visita de hoy a las ${app.time_slot} hrs a: ${prop?.title || 'inmueble'}.`;
@@ -354,7 +359,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="mt-4 pt-4 border-t border-slate-200/80 flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              Sincronizado con base de datos multi-tenant Supabase.
+              Visitas presenciales y virtuales coordinadas en Arequipa.
             </span>
             <button
               onClick={() => onNavigate('agenda')}

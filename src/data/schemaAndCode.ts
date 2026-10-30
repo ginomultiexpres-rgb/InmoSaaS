@@ -220,6 +220,68 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================================================
+-- PERMISOS PARA CLIENTE WEB ANÓNIMO (MODO SaaS CLIENTE)
+-- ============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+-- Políticas de acceso completo para desarrollo
+DROP POLICY IF EXISTS "Anon Full Access Tenants" ON public.tenants;
+CREATE POLICY "Anon Full Access Tenants" ON public.tenants FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Anon Full Access Properties" ON public.properties;
+CREATE POLICY "Anon Full Access Properties" ON public.properties FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Anon Full Access Leads" ON public.crm_leads;
+CREATE POLICY "Anon Full Access Leads" ON public.crm_leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Anon Full Access Appointments" ON public.appointments;
+CREATE POLICY "Anon Full Access Appointments" ON public.appointments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- Compatibilidad si la tabla se llama 'leads' en lugar de 'crm_leads'
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'leads') THEN
+        ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Anon Full Access Leads Table" ON public.leads;
+        CREATE POLICY "Anon Full Access Leads Table" ON public.leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- ============================================================================
+-- SEMBRADO DIRECTO DE DATOS EN AREQUIPA (PostgreSQL Supabase)
+-- ============================================================================
+INSERT INTO public.tenants (id, name, slug, agent_name, email, phone, avatar_url, bio, location)
+VALUES
+('a0000000-0000-0000-0000-000000000001', 'Valeria Mendoza Inmobiliaria', 'valeria-mendoza', 'Valeria Mendoza', 'valeria@inmotenant.pe', '+51 954 112 233', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80', 'Especialista en departamentos y residencias en Cayma y Yanahuara.', 'Arequipa, Perú'),
+('a0000000-0000-0000-0000-000000000002', 'Carlos Benavente Bienes Raíces', 'carlos-benavente', 'Carlos Benavente', 'carlos@inmotenant.pe', '+51 958 443 322', 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop&q=80', 'Broker inmobiliario en Cerro Colorado y Yanahuara.', 'Arequipa, Perú')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, slug = EXCLUDED.slug;
+
+-- Propiedades en Arequipa
+INSERT INTO public.properties (id, tenant_id, title, slug, description, property_type, status, price_pen, currency, bedrooms, bathrooms, area_m2, district, address, image_url, featured)
+VALUES
+('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Departamento de Lujo en Cayma', 'departamento-lujo-cayma', 'Exclusivo departamento en Cayma baja con acabados en cuarzo y vista a la campiña.', 'departamento', 'activa', 580000.00, 'PEN', 3, 3, 145.00, 'Cayma', 'Av. Cayma 620, Cayma, Arequipa', 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80', true),
+('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'Casa Colonial en Yanahuara con Vista al Misti', 'casa-colonial-yanahuara', 'Hermosa casa estilo arequipeño con sillar y terraza panorámica hacia el Misti.', 'casa', 'activa', 1250000.00, 'PEN', 4, 4, 320.00, 'Yanahuara', 'Calle Quesada 114, Yanahuara, Arequipa', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80', true),
+('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'Penthouse Exclusivo en Valle Escondido', 'penthouse-valle-escondido', 'Penthouse de doble altura con ascensor directo privado.', 'departamento', 'activa', 890000.00, 'PEN', 3, 3, 210.00, 'Cayma', 'Urb. Valle Escondido B-12, Cayma, Arequipa', 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80', false),
+('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', 'Terreno Residencial en Cerro Colorado', 'terreno-residencial-cerro-colorado', 'Lote plano dentro de condominio cerrado con seguridad 24/7.', 'terreno', 'activa', 340000.00, 'PEN', 0, 0, 250.00, 'Cerro Colorado', 'Condominio El Sol, Cerro Colorado, Arequipa', 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&auto=format&fit=crop&q=80', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Leads de Arequipa
+INSERT INTO public.crm_leads (id, tenant_id, full_name, phone, email, status, budget_pen, interested_property_id, notes, source)
+VALUES
+('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Rodrigo Pacheco Salazar', '+51 954 112 233', 'rodrigo.pacheco@gmail.com', 'nuevo', 600000.00, 'b0000000-0000-0000-0000-000000000001', 'Interesado en departamento de 3 dormitorios en Cayma baja. Pago al contado.', 'Web Pública'),
+('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'Lucía Alarcón Valdivia', '+51 958 334 112', 'lucia.alarcon@gmail.com', 'contactado', 1250000.00, 'b0000000-0000-0000-0000-000000000002', 'Buscando casa tradicional en Yanahuara con cochera para 2 autos.', 'WhatsApp'),
+('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'Dr. Mauricio Cáceres', '+51 959 778 899', 'dr.caceres@clinica.pe', 'visita', 900000.00, 'b0000000-0000-0000-0000-000000000003', 'Visita agendada para el sábado a las 11:00 AM.', 'Referencia')
+ON CONFLICT (id) DO NOTHING;
+
+-- Citas en Arequipa
+INSERT INTO public.appointments (id, tenant_id, lead_id, property_id, scheduled_at, time_slot, status, visit_type, notes)
+VALUES
+('d0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003', CURRENT_DATE, '11:00 AM', 'programada', 'presencial', 'Recorrido del Penthouse en Valle Escondido con el Dr. Cáceres.')
+ON CONFLICT (id) DO NOTHING;
 `;
 
 export const NEXTJS_FOLDER_STRUCTURE = `mi-inmo-saas/
@@ -820,3 +882,394 @@ export default async function PublicAgentPortfolioPage({ params, searchParams }:
   );
 }
 `;
+
+export const SUPABASE_SEED_SQL = `-- ============================================================================
+-- SCRIPT DE DATOS DE PRUEBA Y PERMISOS PARA SUPABASE (POSTGRESQL)
+-- Proyecto: InmoTenant SaaS (Arequipa, Perú - Moneda: PEN S/.)
+-- Ejecutar en: https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new
+-- ============================================================================
+
+-- 1. HABILITAR EXTENSIÓN UUID
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. ASEGURAR COLUMNAS EN TABLAS EXISTENTES (IDEMPOTENTE)
+-- Tabla tenants
+ALTER TABLE IF EXISTS public.tenants
+  ADD COLUMN IF NOT EXISTS agent_name TEXT DEFAULT 'Agente Inmobiliario',
+  ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'contacto@inmotenant.pe',
+  ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '+51 954 112 233',
+  ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+  ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT 'Asesor inmobiliario especialista en propiedades residenciales y comerciales en Arequipa.',
+  ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Arequipa, Perú';
+
+-- Tabla properties
+ALTER TABLE IF EXISTS public.properties
+  ADD COLUMN IF NOT EXISTS slug TEXT,
+  ADD COLUMN IF NOT EXISTS property_type TEXT DEFAULT 'departamento',
+  ADD COLUMN IF NOT EXISTS price_pen NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'PEN',
+  ADD COLUMN IF NOT EXISTS district TEXT DEFAULT 'Cayma',
+  ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+  ADD COLUMN IF NOT EXISTS gallery_urls TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT false;
+
+-- Sincronizar columna price con price_pen si no tiene valor
+UPDATE public.properties 
+SET price_pen = price 
+WHERE price_pen IS NULL AND price IS NOT NULL;
+
+-- Tabla leads (y crear crm_leads si no existe)
+ALTER TABLE IF EXISTS public.leads
+  ADD COLUMN IF NOT EXISTS full_name TEXT,
+  ADD COLUMN IF NOT EXISTS budget_pen NUMERIC(12,2) DEFAULT 400000,
+  ADD COLUMN IF NOT EXISTS interested_property_id UUID,
+  ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'Portal Web Arequipa';
+
+UPDATE public.leads 
+SET full_name = name 
+WHERE full_name IS NULL AND name IS NOT NULL;
+
+-- Tabla appointments
+ALTER TABLE IF EXISTS public.appointments
+  ADD COLUMN IF NOT EXISTS scheduled_at DATE DEFAULT CURRENT_DATE,
+  ADD COLUMN IF NOT EXISTS time_slot TEXT DEFAULT '10:30 AM',
+  ADD COLUMN IF NOT EXISTS visit_type TEXT DEFAULT 'presencial',
+  ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Crear vista o alias crm_leads para compatibilidad total con ambos nombres
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_leads') THEN
+    CREATE OR REPLACE VIEW public.crm_leads AS SELECT * FROM public.leads;
+  END IF;
+END $$;
+
+-- 2.1 ELIMINAR Y FLEXIBILIZAR RESTRICCIONES CHECK PREVIAS (EVITA ERROR 23514)
+ALTER TABLE IF EXISTS public.properties DROP CONSTRAINT IF EXISTS properties_status_check;
+ALTER TABLE IF EXISTS public.properties DROP CONSTRAINT IF EXISTS properties_property_type_check;
+ALTER TABLE IF EXISTS public.properties DROP CONSTRAINT IF EXISTS properties_type_check;
+
+ALTER TABLE IF EXISTS public.properties 
+  ADD CONSTRAINT properties_status_check 
+  CHECK (status IN ('activa', 'reservada', 'vendida', 'disponible', 'reservado', 'vendido', 'available', 'reserved', 'sold', 'active', 'draft'));
+
+ALTER TABLE IF EXISTS public.leads DROP CONSTRAINT IF EXISTS leads_status_check;
+ALTER TABLE IF EXISTS public.leads DROP CONSTRAINT IF EXISTS crm_leads_status_check;
+
+ALTER TABLE IF EXISTS public.leads 
+  ADD CONSTRAINT leads_status_check 
+  CHECK (status IN ('nuevo', 'contactado', 'visita', 'cerrado', 'new', 'contacted', 'visit', 'closed', 'perdido'));
+
+ALTER TABLE IF EXISTS public.appointments DROP CONSTRAINT IF EXISTS appointments_status_check;
+ALTER TABLE IF EXISTS public.appointments DROP CONSTRAINT IF EXISTS appointments_type_check;
+ALTER TABLE IF EXISTS public.appointments DROP CONSTRAINT IF EXISTS appointments_visit_type_check;
+
+-- 3. PERMISOS Y ROW LEVEL SECURITY (RLS) PARA EL ROL ANÓNIMO
+-- Permite a la aplicación web leer y escribir sin bloqueos 42501
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+
+-- Políticas RLS permisivas para desarrollo y demostración en vivo
+ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permiso publico tenants" ON public.tenants;
+CREATE POLICY "Permiso publico tenants" ON public.tenants FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permiso publico properties" ON public.properties;
+CREATE POLICY "Permiso publico properties" ON public.properties FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'leads') THEN
+    ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "Permiso publico leads" ON public.leads;
+    CREATE POLICY "Permiso publico leads" ON public.leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permiso publico appointments" ON public.appointments;
+CREATE POLICY "Permiso publico appointments" ON public.appointments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 4. INSERTAR DATOS DE PRUEBA: TENANTS (Agentes en Arequipa)
+INSERT INTO public.tenants (id, name, slug, agent_name, email, phone, avatar_url, bio, location)
+VALUES
+  (
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Valeria Mendoza Inmobiliaria',
+    'valeria-mendoza',
+    'Valeria Mendoza',
+    'valeria@inmotenant.pe',
+    '+51 954 112 233',
+    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+    'Especialista con más de 8 años en propiedades premium en Cayma, Yanahuara y Challapampa.',
+    'Arequipa, Perú'
+  ),
+  (
+    'e7c41a29-5d21-4d33-91b7-a5170d9a6c02',
+    'Carlos Benavente Bienes Raíces',
+    'carlos-benavente',
+    'Carlos Benavente',
+    'carlos@inmotenant.pe',
+    '+51 958 443 322',
+    'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop&q=80',
+    'Asesor inmobiliario colegiado experto en terrenos e inmuebles comerciales en Arequipa Metropolitana.',
+    'Arequipa, Perú'
+  )
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  slug = EXCLUDED.slug,
+  agent_name = EXCLUDED.agent_name,
+  email = EXCLUDED.email,
+  phone = EXCLUDED.phone;
+
+-- 5. INSERTAR DATOS DE PRUEBA: PROPERTIES (Propiedades en Arequipa en PEN)
+INSERT INTO public.properties (
+  id, tenant_id, title, slug, description, property_type, status, 
+  price, price_pen, currency, bedrooms, bathrooms, area_m2, district, address, image_url, featured
+)
+VALUES
+  (
+    'd1a23b45-1234-4567-8901-abcdef012345',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Penthouse Exclusivo con Terraza y Vista al Misti',
+    'penthouse-cayma-vista-misti',
+    'Espectacular penthouse dúplex en piso 8 en la mejor zona de Cayma Tradicional. Amplia terraza privada con vista panorámica a la campiña y volcanes. Acabados de lujo, cocina con isla de granito y ascensor directo.',
+    'departamento',
+    'activa',
+    890000,
+    890000,
+    'PEN',
+    3,
+    4,
+    220.00,
+    'Cayma',
+    'Av. Bolognesi 450, Cayma',
+    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80',
+    true
+  ),
+  (
+    'd2a23b45-1234-4567-8901-abcdef012346',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Casa Tradicional Remodelada con Patio de Sillar',
+    'casa-yanahuara-patio-sillar',
+    'Hermosa residencia arequipeña restaurada manteniendo su arquitectura original de sillar blanco y techos abovedados, combinada con modernas comodidades. Jardín interior, 2 cocheras techadas.',
+    'casa',
+    'activa',
+    1250000,
+    1250000,
+    'PEN',
+    4,
+    4,
+    310.00,
+    'Yanahuara',
+    'Calle Cuesta del Ángel 120, Yanahuara',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80',
+    true
+  ),
+  (
+    'd3a23b45-1234-4567-8901-abcdef012347',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Departamento de Estreno en Challapampa',
+    'depto-challapampa-estreno',
+    'Departamento con iluminación natural inmejorable, frente a parque en condominio cerrado con seguridad 24/7. Balcón, gas natural Calidda instalado y cochera independiente.',
+    'departamento',
+    'reservada',
+    580000,
+    580000,
+    'PEN',
+    3,
+    2,
+    115.00,
+    'Cerro Colorado',
+    'Urb. Challapampa Mz. D Lote 4, Cerro Colorado',
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+    false
+  ),
+  (
+    'd4a23b45-1234-4567-8901-abcdef012348',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Terreno Residencial en Urbanización Privada',
+    'terreno-cerro-colorado-280m2',
+    'Excelente terreno urbano completamente saneado, con título de propiedad en Registros Públicos (Sunarp). Factibilidad de todos los servicios básicos, plano y listo para construir.',
+    'terreno',
+    'activa',
+    340000,
+    340000,
+    'PEN',
+    0,
+    0,
+    280.00,
+    'Cerro Colorado',
+    'Urb. Las Orquídeas de Cerro Colorado',
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&auto=format&fit=crop&q=80',
+    false
+  ),
+  (
+    'd5a23b45-1234-4567-8901-abcdef012349',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Dúplex Moderno con Acabados de Cuarzo',
+    'duplex-bustamante-rivero',
+    'Moderno dúplex ubicado cerca a centros comerciales (Mall Aventura Porongoche) y colegios principales. Cuenta con sala de estar, terraza BBQ y cochera subterránea.',
+    'departamento',
+    'activa',
+    420000,
+    420000,
+    'PEN',
+    3,
+    3,
+    135.00,
+    'José Luis Bustamante y Rivero',
+    'Av. Dolores 890, J.L.B. y Rivero',
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop&q=80',
+    false
+  )
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  price = EXCLUDED.price,
+  price_pen = EXCLUDED.price_pen,
+  status = EXCLUDED.status,
+  district = EXCLUDED.district,
+  image_url = EXCLUDED.image_url;
+
+-- 6. INSERTAR DATOS DE PRUEBA: LEADS (Prospectos del CRM)
+INSERT INTO public.leads (
+  id, tenant_id, name, full_name, phone, email, status, budget_pen, interested_property_id, notes, source
+)
+VALUES
+  (
+    'c1a23b45-1234-4567-8901-abcdef012341',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Renzo Cáceres Medina',
+    'Renzo Cáceres Medina',
+    '+51 959 123 456',
+    'renzo.caceres@gmail.com',
+    'nuevo',
+    600000,
+    'd3a23b45-1234-4567-8901-abcdef012347',
+    'Interesado en departamentos en Cayma o Challapampa. Cuenta con crédito hipotecario pre-aprobado BCP.',
+    'Landing /p/valeria-mendoza'
+  ),
+  (
+    'c2a23b45-1234-4567-8901-abcdef012342',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'María Claudia Delgado',
+    'María Claudia Delgado',
+    '+51 984 555 777',
+    'mclaudia.delgado@yahoo.com',
+    'contactado',
+    950000,
+    'd1a23b45-1234-4567-8901-abcdef012345',
+    'Llamada el 29 de octubre. Busca piso alto con terraza para su familia. Solicitó fotos adicionales por WhatsApp.',
+    'WhatsApp Directo'
+  ),
+  (
+    'c3a23b45-1234-4567-8901-abcdef012343',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Dr. Fernando Zegarra',
+    'Dr. Fernando Zegarra',
+    '+51 958 333 999',
+    'dr.zegarra@clinica.pe',
+    'visita',
+    1300000,
+    'd2a23b45-1234-4567-8901-abcdef012346',
+    'Visita programada a la casona de Yanahuara. Compra al contado, evaluará con arquitecto particular.',
+    'Referido'
+  ),
+  (
+    'c4a23b45-1234-4567-8901-abcdef012344',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Gabriela Alarcón P.',
+    'Gabriela Alarcón P.',
+    '+51 953 888 222',
+    'gaby.alarcon@hotmail.com',
+    'visita',
+    380000,
+    'd4a23b45-1234-4567-8901-abcdef012348',
+    'Interesada en terreno para construir su casa. Revisa zonificación R-3 en Cerro Colorado.',
+    'Portal Web Arequipa'
+  ),
+  (
+    'c5a23b45-1234-4567-8901-abcdef012345',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'Ing. Jorge Valdivia',
+    'Ing. Jorge Valdivia',
+    '+51 959 777 111',
+    'jvaldivia@miningcorp.pe',
+    'cerrado',
+    450000,
+    'd5a23b45-1234-4567-8901-abcdef012349',
+    'Minuta firmada ante notaría Rodríguez Velarde. Separación efectuada de S/. 20,000.',
+    'Feria Inmobiliaria Arequipa'
+  )
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  full_name = EXCLUDED.full_name,
+  status = EXCLUDED.status,
+  budget_pen = EXCLUDED.budget_pen,
+  notes = EXCLUDED.notes;
+
+-- 7. INSERTAR DATOS DE PRUEBA: APPOINTMENTS (Citas de la Agenda)
+INSERT INTO public.appointments (
+  id, tenant_id, lead_id, property_id, status, type, visit_type, title, scheduled_at, time_slot, notes
+)
+VALUES
+  (
+    'a1a23b45-1234-4567-8901-abcdef012351',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'c3a23b45-1234-4567-8901-abcdef012343',
+    'd2a23b45-1234-4567-8901-abcdef012346',
+    'programada',
+    'presencial',
+    'presencial',
+    'Visita Casona Yanahuara con Dr. Zegarra',
+    CURRENT_DATE,
+    '10:30 AM',
+    'Llevar planos arquitectónicos de la casa y copia de partida registral.'
+  ),
+  (
+    'a2a23b45-1234-4567-8901-abcdef012352',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'c4a23b45-1234-4567-8901-abcdef012344',
+    'd4a23b45-1234-4567-8901-abcdef012348',
+    'programada',
+    'presencial',
+    'presencial',
+    'Reconocimiento de Terreno Cerro Colorado',
+    CURRENT_DATE,
+    '03:30 PM',
+    'Punto de encuentro en el pórtico de ingreso de la Urb. Las Orquídeas.'
+  ),
+  (
+    'a3a23b45-1234-4567-8901-abcdef012353',
+    'b3f81e62-814a-4d7a-9db1-d3a958e41a01',
+    'c2a23b45-1234-4567-8901-abcdef012342',
+    'd1a23b45-1234-4567-8901-abcdef012345',
+    'programada',
+    'virtual',
+    'virtual',
+    'Recorrido Virtual 360° Penthouse Cayma',
+    CURRENT_DATE + INTERVAL '1 day',
+    '11:00 AM',
+    'Videollamada Google Meet para mostrar distribución y vistas al Misti.'
+  )
+ON CONFLICT (id) DO UPDATE SET
+  status = EXCLUDED.status,
+  title = EXCLUDED.title,
+  scheduled_at = EXCLUDED.scheduled_at,
+  time_slot = EXCLUDED.time_slot;
+
+-- ============================================================================
+-- VERIFICACIÓN FINAL DE REGISTROS INSERTADOS
+-- ============================================================================
+SELECT 'tenants' AS tabla, count(*) AS total_filas FROM public.tenants
+UNION ALL
+SELECT 'properties' AS tabla, count(*) AS total_filas FROM public.properties
+UNION ALL
+SELECT 'leads' AS tabla, count(*) AS total_filas FROM public.leads
+UNION ALL
+SELECT 'appointments' AS tabla, count(*) AS total_filas FROM public.appointments;
+`;
+

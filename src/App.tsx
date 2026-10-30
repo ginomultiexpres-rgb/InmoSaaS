@@ -14,9 +14,7 @@ import { CrmKanbanView } from './components/CrmKanbanView';
 import { AgendaCalendarView } from './components/AgendaCalendarView';
 import { PublicAgentLanding } from './components/PublicAgentLanding';
 import { DeveloperDocsView } from './components/DeveloperDocsView';
-import { SupabaseConnectionModal } from './components/SupabaseConnectionModal';
-import { testSupabaseConnection, loadDataFromSupabase, getSupabaseClient } from './lib/supabase';
-import { Database, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { loadDataFromSupabase, getSupabaseClient } from './lib/supabase';
 
 export default function App() {
   const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
@@ -25,12 +23,6 @@ export default function App() {
   const [properties, setProperties] = useState<Property[]>(INITIAL_PROPERTIES);
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
-
-  // Supabase states
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
-  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   // Navigation View
   const [currentView, setCurrentView] = useState<'dashboard' | 'portafolio' | 'crm' | 'agenda' | 'publico' | 'arquitectura'>('dashboard');
@@ -42,64 +34,58 @@ export default function App() {
   const [scheduleLeadId, setScheduleLeadId] = useState<string | undefined>();
   const [schedulePropertyId, setSchedulePropertyId] = useState<string | undefined>();
 
-  const showNotification = (msg: string) => {
-    setSyncToast(msg);
-    setTimeout(() => setSyncToast(null), 4000);
-  };
-
-  // Cargar datos desde Supabase
-  const fetchLiveSupabaseData = async (tenantId: string) => {
-    setIsSyncing(true);
+  // Cargar datos exclusivamente desde las tablas de Supabase
+  const fetchLiveSupabaseData = async (tenantId?: string) => {
     try {
       const liveData = await loadDataFromSupabase(tenantId);
       if (liveData) {
         if (liveData.tenants && liveData.tenants.length > 0) {
           setTenants(liveData.tenants);
-          const found = liveData.tenants.find((t) => t.id === tenantId);
+          const found = liveData.tenants.find((t) => t.id === tenantId) || liveData.tenants[0];
           if (found) setActiveTenant(found);
         }
+
         if (liveData.properties && liveData.properties.length > 0) {
           setProperties(liveData.properties);
         }
+
         if (liveData.leads && liveData.leads.length > 0) {
           setLeads(liveData.leads);
         }
+
         if (liveData.appointments && liveData.appointments.length > 0) {
           setAppointments(liveData.appointments);
         }
-        showNotification('Datos sincronizados en tiempo real con PostgreSQL (Supabase)');
       }
     } catch (err) {
-      console.warn('Error sincronizando con Supabase:', err);
-    } finally {
-      setIsSyncing(false);
+      console.error('Error cargando tablas de Supabase:', err);
     }
   };
 
-  // Verificar conexión inicial al montar
+  // Cargar datos de Supabase al iniciar la aplicación y mantener suscripción en tiempo real
   useEffect(() => {
-    const verifySupabase = async () => {
-      const result = await testSupabaseConnection();
-      if (result.success) {
-        setIsSupabaseConnected(true);
-        if (result.tablesFound && result.tablesFound.length > 0) {
-          await fetchLiveSupabaseData(activeTenant.id);
-        }
-      } else {
-        setIsSupabaseConnected(false);
-      }
-    };
-    verifySupabase();
+    fetchLiveSupabaseData(activeTenant.id);
+
+    const client = getSupabaseClient();
+    if (client) {
+      const channel = client.channel('public-db-realtime-sync')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          fetchLiveSupabaseData(activeTenant.id);
+        })
+        .subscribe();
+
+      return () => {
+        client.removeChannel(channel);
+      };
+    }
   }, []);
 
-  // Al cambiar de tenant si hay supabase conectado, reconsultar
+  // Al cambiar de agente, sincronizar sus datos
   useEffect(() => {
-    if (isSupabaseConnected) {
-      fetchLiveSupabaseData(activeTenant.id);
-    }
-  }, [activeTenant.id, isSupabaseConnected]);
+    fetchLiveSupabaseData(activeTenant.id);
+  }, [activeTenant.id]);
 
-  // CRUD Propiedades
+  // CRUD Propiedades con persistencia en Supabase
   const handleAddProperty = async (newProp: Omit<Property, 'id' | 'created_at'>) => {
     const prop: Property = {
       ...newProp,
@@ -108,13 +94,10 @@ export default function App() {
     };
     setProperties((prev) => [prop, ...prev]);
 
-    // Persistencia opcional directa en Supabase
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('properties').insert([prop]);
-        if (error) console.error('Error insertando propiedad en Supabase:', error);
-        else showNotification('Propiedad guardada en Supabase');
+        await client.from('properties').insert([prop]);
       } catch (e) {
         console.error(e);
       }
@@ -127,10 +110,9 @@ export default function App() {
     );
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('properties').update(updates).eq('id', id);
-        if (error) console.error('Error actualizando propiedad en Supabase:', error);
+        await client.from('properties').update(updates).eq('id', id);
       } catch (e) {
         console.error(e);
       }
@@ -141,17 +123,16 @@ export default function App() {
     setProperties((prev) => prev.filter((p) => p.id !== id));
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('properties').delete().eq('id', id);
-        if (error) console.error('Error eliminando propiedad en Supabase:', error);
+        await client.from('properties').delete().eq('id', id);
       } catch (e) {
         console.error(e);
       }
     }
   };
 
-  // CRM Leads
+  // CRM Leads con persistencia tolerante (crm_leads o leads)
   const handleAddLead = async (newLead: Omit<Lead, 'id' | 'created_at'>) => {
     const lead: Lead = {
       ...newLead,
@@ -161,11 +142,12 @@ export default function App() {
     setLeads((prev) => [lead, ...prev]);
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('crm_leads').insert([lead]);
-        if (error) console.error('Error insertando lead en Supabase:', error);
-        else showNotification('Lead registrado en Supabase');
+        const res1 = await client.from('crm_leads').insert([lead]);
+        if (res1.error) {
+          await client.from('leads').insert([lead]);
+        }
       } catch (e) {
         console.error(e);
       }
@@ -178,10 +160,12 @@ export default function App() {
     );
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('crm_leads').update({ status }).eq('id', id);
-        if (error) console.error('Error actualizando estado en Supabase:', error);
+        const res1 = await client.from('crm_leads').update({ status }).eq('id', id);
+        if (res1.error) {
+          await client.from('leads').update({ status }).eq('id', id);
+        }
       } catch (e) {
         console.error(e);
       }
@@ -194,10 +178,12 @@ export default function App() {
     );
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('crm_leads').update(updates).eq('id', id);
-        if (error) console.error('Error actualizando lead en Supabase:', error);
+        const res1 = await client.from('crm_leads').update(updates).eq('id', id);
+        if (res1.error) {
+          await client.from('leads').update(updates).eq('id', id);
+        }
       } catch (e) {
         console.error(e);
       }
@@ -208,17 +194,19 @@ export default function App() {
     setLeads((prev) => prev.filter((l) => l.id !== id));
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('crm_leads').delete().eq('id', id);
-        if (error) console.error('Error eliminando lead en Supabase:', error);
+        const res1 = await client.from('crm_leads').delete().eq('id', id);
+        if (res1.error) {
+          await client.from('leads').delete().eq('id', id);
+        }
       } catch (e) {
         console.error(e);
       }
     }
   };
 
-  // Agenda Citas
+  // Agenda Citas con persistencia
   const handleAddAppointment = async (newApp: Omit<Appointment, 'id' | 'created_at'>) => {
     const appointment: Appointment = {
       ...newApp,
@@ -227,15 +215,12 @@ export default function App() {
     };
     setAppointments((prev) => [appointment, ...prev]);
 
-    // Opcionalmente actualizar el lead a 'visita'
     handleUpdateLeadStatus(newApp.lead_id, 'visita');
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('appointments').insert([appointment]);
-        if (error) console.error('Error insertando cita en Supabase:', error);
-        else showNotification('Cita agendada y guardada en Supabase');
+        await client.from('appointments').insert([appointment]);
       } catch (e) {
         console.error(e);
       }
@@ -248,10 +233,9 @@ export default function App() {
     );
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('appointments').update({ status }).eq('id', id);
-        if (error) console.error('Error actualizando cita en Supabase:', error);
+        await client.from('appointments').update({ status }).eq('id', id);
       } catch (e) {
         console.error(e);
       }
@@ -262,10 +246,9 @@ export default function App() {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        const { error } = await client.from('appointments').delete().eq('id', id);
-        if (error) console.error('Error eliminando cita en Supabase:', error);
+        await client.from('appointments').delete().eq('id', id);
       } catch (e) {
         console.error(e);
       }
@@ -306,16 +289,19 @@ export default function App() {
     setLeads((prev) => [lead, ...prev]);
 
     const client = getSupabaseClient();
-    if (client && isSupabaseConnected) {
+    if (client) {
       try {
-        await client.from('crm_leads').insert([lead]);
+        const res1 = await client.from('crm_leads').insert([lead]);
+        if (res1.error) {
+          await client.from('leads').insert([lead]);
+        }
       } catch (e) {
         console.error(e);
       }
     }
   };
 
-  // Si la vista es la página pública del agente, renderizamos la simulación de /p/[slug]
+  // Vista pública de aterrizaje del agente
   if (currentView === 'publico') {
     return (
       <PublicAgentLanding
@@ -331,24 +317,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-      {/* Top Bar Contract (3 zonas) */}
+      {/* Top Bar (3 zonas) */}
       <Navbar
         currentView={currentView}
         onSelectView={setCurrentView}
         tenants={tenants}
         activeTenant={activeTenant}
         onSelectTenant={setActiveTenant}
-        isSupabaseConnected={isSupabaseConnected}
-        onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
       />
-
-      {/* Sync Toast Notification */}
-      {syncToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[#0A192F] text-white shadow-2xl border border-[#FFCD00]/40 animate-in fade-in slide-in-from-bottom-3 duration-200 text-xs">
-          <CheckCircle2 className="w-4 h-4 text-[#FFCD00] shrink-0" />
-          <span className="font-medium">{syncToast}</span>
-        </div>
-      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -426,16 +402,6 @@ export default function App() {
         {currentView === 'arquitectura' && <DeveloperDocsView />}
       </main>
 
-      {/* Modal de Conexión a Supabase */}
-      <SupabaseConnectionModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-        onConnectionSuccess={() => {
-          setIsSupabaseConnected(true);
-          fetchLiveSupabaseData(activeTenant.id);
-        }}
-      />
-
       {/* Footer del Backoffice en Glass Presidential */}
       <footer className="glass-presidential text-white py-6 px-4 text-center text-xs border-t border-white/10 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -443,15 +409,7 @@ export default function App() {
             InmoTenant Perú · SaaS Multi-Tenant para Agentes Inmobiliarios en <strong className="text-[#FFCD00]">Arequipa</strong>
           </span>
           <div className="flex items-center gap-4 text-slate-300">
-            <button
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className="flex items-center gap-1.5 hover:text-[#FFCD00] transition cursor-pointer"
-            >
-              <Database className="w-3.5 h-3.5 text-[#FFCD00]" />
-              <span className={isSupabaseConnected ? 'text-emerald-400 font-semibold' : ''}>
-                {isSupabaseConnected ? 'Supabase Conectado' : 'Configurar Supabase'}
-              </span>
-            </button>
+            <span>Arequipa, Perú</span>
             <span>·</span>
             <span>Next.js 15 App Router</span>
             <span>·</span>

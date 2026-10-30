@@ -8,8 +8,6 @@ interface NavbarProps {
   tenants: Tenant[];
   activeTenant: Tenant;
   onSelectTenant: (tenant: Tenant) => void;
-  isSupabaseConnected: boolean;
-  onOpenSupabaseModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,8 +16,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   tenants,
   activeTenant,
   onSelectTenant,
-  isSupabaseConnected,
-  onOpenSupabaseModal,
 }) => {
   const [tenantDropdownOpen, setTenantDropdownOpen] = React.useState(false);
 
@@ -104,29 +100,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Zone 3: Primary Action & Tenant Selector */}
           <div className="flex items-center gap-3 shrink-0">
-            {/* Supabase Status Button */}
-            <button
-              onClick={onOpenSupabaseModal}
-              title="Configuración y Estado de Conexión Supabase"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer backdrop-blur-md ${
-                isSupabaseConnected
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                  : 'bg-white/10 text-white/90 border-white/20 hover:bg-white/20 hover:border-[#FFCD00]/50'
-              }`}
-            >
-              <div className="relative flex items-center justify-center">
-                <Database className={`w-3.5 h-3.5 ${isSupabaseConnected ? 'text-emerald-400' : 'text-[#FFCD00]'}`} />
-                <span
-                  className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                    isSupabaseConnected ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
-                  }`}
-                />
-              </div>
-              <span className="hidden sm:inline">
-                {isSupabaseConnected ? 'Supabase Conectado' : 'Conectar Supabase'}
-              </span>
-            </button>
-
             {/* Tenant Selector Dropdown */}
             <div className="relative">
               <button
