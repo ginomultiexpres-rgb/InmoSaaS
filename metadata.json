@@ -1,0 +1,6 @@
+{
+  "name": "InmoTenant Arequipa - Real Estate SaaS",
+  "description": "Plataforma SaaS multi-tenant para agentes inmobiliarios en Arequipa, Perú. Portafolio público, CRM Kanban de leads, agenda de visitas y arquitectura Next.js con Supabase RLS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

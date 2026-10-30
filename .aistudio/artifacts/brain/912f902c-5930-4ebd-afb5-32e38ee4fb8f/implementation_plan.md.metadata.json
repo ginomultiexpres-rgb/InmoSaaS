@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan de implementación para el nuevo Tablero CRM Kanban interactivo con drag-and-drop de tarjetas entre columnas de etapas, filtros rápidos por distrito de Arequipa y presupuesto en Soles (PEN), métricas financieras por columna y sincronización con Supabase.",
+  "updatedAt":  "2026-10-28T16:14:39.992919083Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

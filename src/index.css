@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --azul-presidente: #0a192f;
+    --azul-presidente-dark: #06101e;
+    --azul-presidente-mid: #0d2240;
+    --azul-presidente-light: #15335b;
+    --amarillo-cat: #ffcd00;
+    --amarillo-cat-hover: #e6b800;
+    --amarillo-cat-muted: #fff1b8;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    color: #0a192f;
+    background-color: #f1f5f9;
+    overflow-x: hidden;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glassmorphism Styles (Azul Presidente + Amarillo CAT + Blanco) */
+.glass-white {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 8px 32px 0 rgba(10, 25, 47, 0.05);
+}
+
+.glass-presidential {
+  background: rgba(10, 25, 47, 0.9);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(6, 16, 30, 0.37);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(10, 25, 47, 0.04);
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 205, 0, 0.5);
+  box-shadow: 0 12px 28px -4px rgba(10, 25, 47, 0.08), 0 0 16px -2px rgba(255, 205, 0, 0.15);
+}
+
+/* CRM Canvas Dot Pattern & Blueprint Grid */
+.bg-canvas-dots-presidential {
+  background-image: radial-gradient(rgba(255, 205, 0, 0.25) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+/* Amarillo CAT Accent Glow */
+@keyframes cat-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px -2px rgba(255, 205, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px 3px rgba(255, 205, 0, 0.55), 0 0 8px 1px rgba(255, 205, 0, 0.3);
+  }
+}
+
+.animate-cat-glow {
+  animation: cat-glow 2.5s ease-in-out infinite;
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shimmer::after {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 205, 0, 0.2) 20%,
+    rgba(255, 255, 255, 0.6) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 2.8s infinite;
+  content: '';
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ffcd00;
+}
+
