@@ -40,7 +40,7 @@ export const DeveloperDocsView: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <a
-            href="https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new"
+            href="https://supabase.com/dashboard/project/TU-PROJECT-REF/sql/new"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCD00] text-[#0A192F] hover:bg-[#E6B800] rounded-xl text-xs font-black transition shadow-md"
@@ -146,7 +146,7 @@ export const DeveloperDocsView: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <a
-                href="https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new"
+                href="https://supabase.com/dashboard/project/TU-PROJECT-REF/sql/new"
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white rounded-xl transition"

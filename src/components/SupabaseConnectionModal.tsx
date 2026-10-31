@@ -231,7 +231,7 @@ export const SupabaseConnectionModal: React.FC<SupabaseConnectionModalProps> = (
                       )}
                     </button>
                     <a
-                      href="https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new"
+                      href="https://supabase.com/dashboard/project/TU-PROJECT-REF/sql/new"
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition cursor-pointer"

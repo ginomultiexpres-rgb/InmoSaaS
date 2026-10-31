@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tenant } from '../types';
-import { ExternalLink, ChevronDown, Check, Sparkles, Database } from 'lucide-react';
+import { AppSession } from '../lib/auth';
+import { ExternalLink, ChevronDown, Check, Sparkles, Database, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   currentView: 'dashboard' | 'portafolio' | 'crm' | 'agenda' | 'publico' | 'arquitectura';
@@ -8,6 +9,8 @@ interface NavbarProps {
   tenants: Tenant[];
   activeTenant: Tenant;
   onSelectTenant: (tenant: Tenant) => void;
+  session?: AppSession | null;
+  onSignOut?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,6 +19,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   tenants,
   activeTenant,
   onSelectTenant,
+  session,
+  onSignOut,
 }) => {
   const [tenantDropdownOpen, setTenantDropdownOpen] = React.useState(false);
 
@@ -86,17 +91,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Agenda
             </button>
-            <button
-              onClick={() => onSelectView('arquitectura')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                currentView === 'arquitectura'
-                  ? 'bg-[#FFCD00] text-[#0A192F] font-bold shadow-md'
-                  : 'text-white/80 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              Esquema SQL & Next.js
-            </button>
+            {/* Fase 1.4: la vista de esquema SQL solo es accesible para rol admin */}
+            {session?.role === 'admin' && (
+              <button
+                onClick={() => onSelectView('arquitectura')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                  currentView === 'arquitectura'
+                    ? 'bg-[#FFCD00] text-[#0A192F] font-bold shadow-md'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                Esquema SQL & Next.js
+              </button>
+            )}
           </nav>
+
+          {/* Sesión / Logout */}
+          {session && (
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <span className="text-[11px] font-semibold text-slate-200 max-w-[160px] truncate" title={session.email}>
+                {session.email}
+                {session.role === 'admin' && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#FFCD00]/20 text-[#FFCD00] text-[9px] uppercase font-black">
+                    Admin
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={onSignOut}
+                title="Cerrar sesión"
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Zone 3: Primary Action & Tenant Selector */}
           <div className="flex items-center gap-3 shrink-0">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Tenant, Lead, Property, Appointment, AppointmentStatus, VisitType } from '../types';
 import { formatPEN, formatWhatsAppLink, formatDateSpanish } from '../utils/formatters';
 import { 
@@ -50,6 +50,16 @@ export const AgendaCalendarView: React.FC<AgendaCalendarViewProps> = ({
   const [formVisitType, setFormVisitType] = useState<VisitType>('presencial');
   const [formNotes, setFormNotes] = useState('');
 
+  // Re-sincronizar el formulario cuando llega una nueva selección desde el CRM
+  // (el componente ya está montado, por lo que los initial state no se aplican solos).
+  useEffect(() => {
+    if (preselectedLeadId) {
+      setFormLeadId(preselectedLeadId);
+      setFormPropertyId(preselectedPropertyId || '');
+      setIsModalOpen(true);
+    }
+  }, [preselectedLeadId, preselectedPropertyId]);
+
   const rawTenantAppointments = appointments.filter((a) => a.tenant_id === tenant.id);
   const tenantAppointments = rawTenantAppointments.length > 0 ? rawTenantAppointments : appointments;
   const rawTenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
@@ -62,16 +72,18 @@ export const AgendaCalendarView: React.FC<AgendaCalendarViewProps> = ({
     .filter((a) => a.scheduled_at === selectedDate || (!tenantAppointments.some(x => x.scheduled_at === selectedDate) && a.status === 'programada'))
     .sort((a, b) => a.time_slot.localeCompare(b.time_slot));
 
-  // Generate 7-day quick calendar bar around the target date
-  const calendarDays = [
-    { date: '2026-03-26', label: 'Jue 26' },
-    { date: '2026-03-27', label: 'Vie 27' },
-    { date: '2026-03-28', label: 'Sáb 28 (Hoy)' },
-    { date: '2026-03-29', label: 'Dom 29' },
-    { date: '2026-03-30', label: 'Lun 30' },
-    { date: '2026-03-31', label: 'Mar 31' },
-    { date: '2026-04-01', label: 'Mié 01' },
-  ];
+  // Generar la barra de calendario: 7 días a partir del día seleccionado
+  const calendarDays = (() => {
+    const base = new Date(`${selectedDate}T12:00:00`);
+    const todayStr = new Date().toISOString().split('T')[0];
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const label = new Intl.DateTimeFormat('es-PE', { weekday: 'short', day: '2-digit' }).format(d);
+      return { date: iso, label: label.charAt(0).toUpperCase() + label.slice(1) + (iso === todayStr ? ' (Hoy)' : '') };
+    });
+  })();
 
   const handleCreateAppointment = (e: React.FormEvent) => {
     e.preventDefault();

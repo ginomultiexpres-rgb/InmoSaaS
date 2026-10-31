@@ -1,8 +1,16 @@
+# Dependencias
 node_modules/
-build/
+
+# Builds
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
+
+# Variables de entorno (NUNCA commitear credenciales)
+.env
+.env.local
+.env.*.local
+.env.*
 !.env.example
+
+# Artefactos
+package-lock.json
+*.log
