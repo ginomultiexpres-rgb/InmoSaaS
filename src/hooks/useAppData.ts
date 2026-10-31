@@ -40,24 +40,12 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
     [notify],
   );
 
-  // Carga inicial + suscripción realtime por tenant activo
+  // Carga inicial + recarga al cambiar de tenant.
+  // (Se retiró la suscripción realtime 'postgres_changes' sobre TODAS las tablas:
+  // re-disparaba fetchLiveSupabaseData en cascada. Se puede reactivar por tabla si se necesita.)
   useEffect(() => {
-    let cancelled = false;
     setLoading(true);
     fetchLiveSupabaseData(activeTenantId);
-
-    const client = getSupabaseClient();
-    const channel = client
-      .channel('public-db-realtime-sync')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        if (!cancelled) fetchLiveSupabaseData(activeTenantId);
-      })
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      client.removeChannel(channel);
-    };
   }, [activeTenantId, fetchLiveSupabaseData]);
 
   // ── Propiedades ────────────────────────────────────────────────────────────
@@ -94,6 +82,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
             : [newProp.image_url || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80'],
         featured: Boolean(newProp.featured),
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const prop: Property = {
@@ -151,6 +140,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
       try {
         const updatePayload: Record<string, unknown> = { ...updates };
         if (updates.price_pen !== undefined) updatePayload.price = updates.price_pen;
+        updatePayload.updated_at = new Date().toISOString();
         const { error } = await getSupabaseClient().from('properties').update(updatePayload).eq('id', id);
         if (error) throw error;
       } catch (e: any) {
@@ -216,6 +206,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
         notes: newLead.notes || '',
         source: newLead.source || 'CRM',
         created_at: lead.created_at,
+        updated_at: lead.created_at,
       };
       const res = await mutateLeadTable('insert', [leadPayload]);
       if (!res.ok) {
@@ -235,7 +226,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
         snapshot = prev;
         return prev.map((l) => (l.id === id ? { ...l, status } : l));
       });
-      const res = await mutateLeadTable('update', { status }, id);
+      const res = await mutateLeadTable('update', { status, updated_at: new Date().toISOString() }, id);
       if (!res.ok) {
         setLeads(snapshot);
         notify({ type: 'error', message: `No se pudo actualizar el lead: ${res.error ?? 'desconocido'}` });
@@ -253,6 +244,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
       });
       const updatesWithAlias: Record<string, unknown> = { ...updates };
       if (updates.full_name) updatesWithAlias.name = updates.full_name;
+      updatesWithAlias.updated_at = new Date().toISOString();
       const res = await mutateLeadTable('update', updatesWithAlias, id);
       if (!res.ok) {
         setLeads(snapshot);
@@ -300,6 +292,7 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
         status: newApp.status || 'programada',
         notes: newApp.notes || '',
         created_at: appointment.created_at,
+        updated_at: appointment.created_at,
       };
       try {
         const { error } = await getSupabaseClient().from('appointments').insert([appPayload]);
@@ -321,7 +314,10 @@ export function useAppData(activeTenantId: string, notify: (t: ToastMsg) => void
         return prev.map((a) => (a.id === id ? { ...a, status } : a));
       });
       try {
-        const { error } = await getSupabaseClient().from('appointments').update({ status }).eq('id', id);
+        const { error } = await getSupabaseClient()
+          .from('appointments')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('id', id);
         if (error) throw error;
       } catch (e: any) {
         setAppointments(snapshot);

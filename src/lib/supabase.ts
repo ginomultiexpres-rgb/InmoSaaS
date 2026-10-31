@@ -148,7 +148,8 @@ export const loadDataFromSupabase = async (tenantId?: string): Promise<DataLoadR
   const client = getSupabaseClient();
 
   try {
-    // Consultar las 4 tablas en paralelo directamente a Supabase
+    // Consultar las 4 tablas en paralelo directamente a Supabase.
+    // Nota: la tabla canónica de leads se resuelve más abajo ('leads' o legacy 'crm_leads').
     const [tRes, pRes, lRes, aRes] = await Promise.all([
       client.from('tenants').select('*'),
       client.from('properties').select('*'),
@@ -156,9 +157,12 @@ export const loadDataFromSupabase = async (tenantId?: string): Promise<DataLoadR
       client.from('appointments').select('*'),
     ]);
 
-    // Si todas las consultas fallaron → error explícito (no mock silencioso)
-    if (tRes.error && pRes.error && lRes.error && aRes.error) {
-      return buildResult('error', undefined, lRes.error?.message || tRes.error?.message || 'Consulta fallida');
+    // Error explícito SOLO si una consulta falla por algo distinto a "tabla no existe"
+    // (code 42P01). La ausencia de la tabla 'leads' es un caso soportado: se usa 'crm_leads'.
+    const TABLE_MISSING = '42P01';
+    const realError = [tRes, pRes, aRes].find((r) => r.error && r.error.code !== TABLE_MISSING);
+    if (realError?.error) {
+      return buildResult('error', undefined, realError.error.message || 'Consulta fallida');
     }
 
     // 1. Tenants de Supabase
@@ -205,7 +209,7 @@ export const loadDataFromSupabase = async (tenantId?: string): Promise<DataLoadR
 
     // 3. Leads de Supabase (tabla canónica 'leads'; espejo legacy 'crm_leads')
     let rawLeads: any[] = lRes.data ?? [];
-    if (rawLeads.length === 0) {
+    if (lRes.error || rawLeads.length === 0) {
       const crmRes = await client.from('crm_leads').select('*');
       if (!crmRes.error && crmRes.data && crmRes.data.length > 0) {
         rawLeads = crmRes.data;

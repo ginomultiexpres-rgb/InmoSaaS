@@ -34,12 +34,15 @@ export default function App() {
   // ── Sesión (Fase 1.3) ──────────────────────────────────────────────────────
   const [session, setSession] = useState<AppSession | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  // 'supabase' (credenciales reales) | 'demo' (login local sin backend de auth)
+  const [authMode, setAuthMode] = useState<'supabase' | 'demo'>('demo');
 
   useEffect(() => {
     let mounted = true;
-    restoreSession().then(({ session: s }) => {
+    restoreSession().then(({ session: s, status }) => {
       if (mounted) {
         setSession(s);
+        setAuthMode(status === 'authenticated' ? 'supabase' : 'demo');
         setAuthReady(true);
       }
     });
@@ -73,7 +76,10 @@ export default function App() {
   }, [data.tenants, activeTenant]);
 
   // Guardar sesión tras login desde LoginView
-  const handleLoggedIn = (s: AppSession) => setSession(s);
+  const handleLoggedIn = (s: AppSession, mode: 'supabase' | 'demo') => {
+    setSession(s);
+    setAuthMode(mode);
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -125,7 +131,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-      <DataSourceBanner source={data.dataSource} />
+      <DataSourceBanner source={data.dataSource} authMode={authMode} />
 
       {/* Top Bar (3 zonas) */}
       <Navbar
