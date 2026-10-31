@@ -1,1 +1,16 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+
+# Variables de entorno (NUNCA commitear credenciales)
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
+# Artefactos
 package-lock.json
+*.log

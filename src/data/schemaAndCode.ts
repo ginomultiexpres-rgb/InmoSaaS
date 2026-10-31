@@ -228,18 +228,32 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
--- Políticas de acceso completo para desarrollo
+-- Políticas RLS con escoping multi-tenant real (Fase 1.2 del plan de acción).
+-- Nota: current_tenant_id() solo resuelve para usuarios AUTENTICADOS; las
+-- rutas anónimas quedan limitadas a datos públicos (perfiles y propiedades activas).
 DROP POLICY IF EXISTS "Anon Full Access Tenants" ON public.tenants;
-CREATE POLICY "Anon Full Access Tenants" ON public.tenants FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Tenants: lectura pública de perfil, escritura solo dueño" ON public.tenants
+  FOR ALL TO anon, authenticated
+  USING (id = public.current_tenant_id() OR (auth.uid() IS NULL AND public.current_tenant_id() IS NULL))
+  WITH CHECK (id = public.current_tenant_id());
 
 DROP POLICY IF EXISTS "Anon Full Access Properties" ON public.properties;
-CREATE POLICY "Anon Full Access Properties" ON public.properties FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Properties: CRUD solo propio tenant" ON public.properties
+  FOR ALL TO anon, authenticated
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 DROP POLICY IF EXISTS "Anon Full Access Leads" ON public.crm_leads;
-CREATE POLICY "Anon Full Access Leads" ON public.crm_leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Leads: CRUD solo propio tenant" ON public.crm_leads
+  FOR ALL TO anon, authenticated
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 DROP POLICY IF EXISTS "Anon Full Access Appointments" ON public.appointments;
-CREATE POLICY "Anon Full Access Appointments" ON public.appointments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Appointments: CRUD solo propio tenant" ON public.appointments
+  FOR ALL TO anon, authenticated
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 -- Compatibilidad si la tabla se llama 'leads' en lugar de 'crm_leads'
 DO $$
@@ -247,7 +261,10 @@ BEGIN
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'leads') THEN
         ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
         DROP POLICY IF EXISTS "Anon Full Access Leads Table" ON public.leads;
-        CREATE POLICY "Anon Full Access Leads Table" ON public.leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+        CREATE POLICY "Leads Table: CRUD solo propio tenant" ON public.leads
+          FOR ALL TO anon, authenticated
+          USING (tenant_id = public.current_tenant_id())
+          WITH CHECK (tenant_id = public.current_tenant_id());
     END IF;
 END $$;
 
@@ -886,7 +903,7 @@ export default async function PublicAgentPortfolioPage({ params, searchParams }:
 export const SUPABASE_SEED_SQL = `-- ============================================================================
 -- SCRIPT DE DATOS DE PRUEBA Y PERMISOS PARA SUPABASE (POSTGRESQL)
 -- Proyecto: InmoTenant SaaS (Arequipa, Perú - Moneda: PEN S/.)
--- Ejecutar en: https://supabase.com/dashboard/project/imospkeubutacrluepfa/sql/new
+-- Ejecutar en: https://supabase.com/dashboard/project/TU-PROJECT-REF/sql/new
 -- ============================================================================
 
 -- 1. HABILITAR EXTENSIÓN UUID
@@ -974,24 +991,36 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authentic
 -- Políticas RLS permisivas para desarrollo y demostración en vivo
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permiso publico tenants" ON public.tenants;
-CREATE POLICY "Permiso publico tenants" ON public.tenants FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "RLS tenants por tenant_id" ON public.tenants
+  FOR ALL TO anon, authenticated
+  USING (id = public.current_tenant_id())
+  WITH CHECK (id = public.current_tenant_id());
 
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permiso publico properties" ON public.properties;
-CREATE POLICY "Permiso publico properties" ON public.properties FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "RLS properties por tenant_id" ON public.properties
+  FOR ALL TO anon, authenticated
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'leads') THEN
     ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS "Permiso publico leads" ON public.leads;
-    CREATE POLICY "Permiso publico leads" ON public.leads FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+    CREATE POLICY "RLS leads por tenant_id" ON public.leads
+      FOR ALL TO anon, authenticated
+      USING (tenant_id = public.current_tenant_id())
+      WITH CHECK (tenant_id = public.current_tenant_id());
   END IF;
 END $$;
 
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permiso publico appointments" ON public.appointments;
-CREATE POLICY "Permiso publico appointments" ON public.appointments FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "RLS appointments por tenant_id" ON public.appointments
+  FOR ALL TO anon, authenticated
+  USING (tenant_id = public.current_tenant_id())
+  WITH CHECK (tenant_id = public.current_tenant_id());
 
 -- 4. INSERTAR DATOS DE PRUEBA: TENANTS (Agentes en Arequipa)
 INSERT INTO public.tenants (id, name, slug, agent_name, email, phone, avatar_url, bio, location)
