@@ -136,9 +136,10 @@ export const CrmKanbanView: React.FC<CrmKanbanViewProps> = ({
   });
 
   const tenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
+  const leadsToDisplay = tenantLeads.length > 0 ? tenantLeads : leads;
 
   // Aplicar filtros
-  const filteredLeads = tenantLeads.filter((lead) => {
+  const filteredLeads = leadsToDisplay.filter((lead) => {
     // 1. Búsqueda de texto
     const q = searchQuery.toLowerCase().trim();
     if (q) {

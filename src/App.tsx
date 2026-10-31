@@ -15,6 +15,7 @@ import { AgendaCalendarView } from './components/AgendaCalendarView';
 import { PublicAgentLanding } from './components/PublicAgentLanding';
 import { DeveloperDocsView } from './components/DeveloperDocsView';
 import { loadDataFromSupabase, getSupabaseClient } from './lib/supabase';
+import { generateUUID } from './utils/uuid';
 
 export default function App() {
   const [tenants, setTenants] = useState<Tenant[]>(INITIAL_TENANTS);
@@ -45,15 +46,15 @@ export default function App() {
           if (found) setActiveTenant(found);
         }
 
-        if (liveData.properties && liveData.properties.length > 0) {
+        if (liveData.properties) {
           setProperties(liveData.properties);
         }
 
-        if (liveData.leads && liveData.leads.length > 0) {
+        if (liveData.leads) {
           setLeads(liveData.leads);
         }
 
-        if (liveData.appointments && liveData.appointments.length > 0) {
+        if (liveData.appointments) {
           setAppointments(liveData.appointments);
         }
       }
@@ -62,44 +63,94 @@ export default function App() {
     }
   };
 
-  // Cargar datos de Supabase al iniciar la aplicación y mantener suscripción en tiempo real
+  // Cargar datos de Supabase y mantener suscripción en tiempo real
   useEffect(() => {
     fetchLiveSupabaseData(activeTenant.id);
 
     const client = getSupabaseClient();
-    if (client) {
-      const channel = client.channel('public-db-realtime-sync')
-        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          fetchLiveSupabaseData(activeTenant.id);
-        })
-        .subscribe();
+    const channel = client.channel('public-db-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        fetchLiveSupabaseData(activeTenant.id);
+      })
+      .subscribe();
 
-      return () => {
-        client.removeChannel(channel);
-      };
-    }
-  }, []);
-
-  // Al cambiar de agente, sincronizar sus datos
-  useEffect(() => {
-    fetchLiveSupabaseData(activeTenant.id);
+    return () => {
+      client.removeChannel(channel);
+    };
   }, [activeTenant.id]);
 
   // CRUD Propiedades con persistencia en Supabase
   const handleAddProperty = async (newProp: Omit<Property, 'id' | 'created_at'>) => {
-    const prop: Property = {
-      ...newProp,
-      id: `prop-${Date.now()}`,
+    const newId = generateUUID();
+    const cleanSlug = (newProp.slug || newProp.title)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || `prop-${Date.now()}`;
+
+    const propRecord = {
+      id: newId,
+      tenant_id: newProp.tenant_id || activeTenant.id,
+      title: newProp.title.trim(),
+      slug: cleanSlug,
+      description: newProp.description || '',
+      property_type: newProp.property_type || 'departamento',
+      status: (['activa', 'reservada', 'vendida'].includes(newProp.status) ? newProp.status : 'activa'),
+      price: Number(newProp.price_pen) || 0,
+      price_pen: Number(newProp.price_pen) || 0,
+      currency: newProp.currency || 'PEN',
+      bedrooms: Number(newProp.bedrooms) || 0,
+      bathrooms: Number(newProp.bathrooms) || 0,
+      area_m2: Number(newProp.area_m2) || 0,
+      district: newProp.district || 'Cayma',
+      address: newProp.address || '',
+      image_url: newProp.image_url || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80',
+      gallery_urls: Array.isArray(newProp.gallery_urls) && newProp.gallery_urls.length > 0 
+        ? newProp.gallery_urls 
+        : [newProp.image_url || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80'],
+      featured: Boolean(newProp.featured),
       created_at: new Date().toISOString(),
     };
+
+    const prop: Property = {
+      id: propRecord.id,
+      tenant_id: propRecord.tenant_id,
+      title: propRecord.title,
+      slug: propRecord.slug,
+      description: propRecord.description,
+      property_type: propRecord.property_type as any,
+      status: propRecord.status as any,
+      price_pen: propRecord.price_pen,
+      currency: propRecord.currency,
+      bedrooms: propRecord.bedrooms,
+      bathrooms: propRecord.bathrooms,
+      area_m2: propRecord.area_m2,
+      district: propRecord.district,
+      address: propRecord.address,
+      image_url: propRecord.image_url,
+      gallery_urls: propRecord.gallery_urls,
+      featured: propRecord.featured,
+      created_at: propRecord.created_at,
+    };
+
+    // Actualización inmediata en estado local
     setProperties((prev) => [prop, ...prev]);
 
     const client = getSupabaseClient();
     if (client) {
       try {
-        await client.from('properties').insert([prop]);
+        const { error } = await client.from('properties').insert([propRecord]);
+        if (error) {
+          console.error('Error al insertar propiedad en Supabase:', error);
+          if (error.code === '23505' || error.message?.includes('slug')) {
+            const retrySlug = `${cleanSlug}-${Date.now().toString().slice(-4)}`;
+            propRecord.slug = retrySlug;
+            prop.slug = retrySlug;
+            await client.from('properties').insert([propRecord]);
+          }
+        }
       } catch (e) {
-        console.error(e);
+        console.error('Excepción al crear propiedad:', e);
       }
     }
   };
@@ -112,9 +163,13 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        await client.from('properties').update(updates).eq('id', id);
+        const updatePayload: any = { ...updates };
+        if (updates.price_pen !== undefined) {
+          updatePayload.price = updates.price_pen;
+        }
+        await client.from('properties').update(updatePayload).eq('id', id);
       } catch (e) {
-        console.error(e);
+        console.error('Error al actualizar propiedad en Supabase:', e);
       }
     }
   };
@@ -127,16 +182,17 @@ export default function App() {
       try {
         await client.from('properties').delete().eq('id', id);
       } catch (e) {
-        console.error(e);
+        console.error('Error al eliminar propiedad en Supabase:', e);
       }
     }
   };
 
-  // CRM Leads con persistencia tolerante (crm_leads o leads)
+  // CRM Leads con persistencia tolerante (leads o crm_leads) con UUID
   const handleAddLead = async (newLead: Omit<Lead, 'id' | 'created_at'>) => {
+    const newId = generateUUID();
     const lead: Lead = {
       ...newLead,
-      id: `lead-${Date.now()}`,
+      id: newId,
       created_at: new Date().toISOString(),
     };
     setLeads((prev) => [lead, ...prev]);
@@ -144,12 +200,26 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        const res1 = await client.from('crm_leads').insert([lead]);
+        const leadPayload = {
+          id: newId,
+          tenant_id: newLead.tenant_id || activeTenant.id,
+          name: newLead.full_name,
+          full_name: newLead.full_name,
+          phone: newLead.phone,
+          email: newLead.email,
+          status: newLead.status || 'nuevo',
+          budget_pen: Number(newLead.budget_pen) || 0,
+          interested_property_id: newLead.interested_property_id || null,
+          notes: newLead.notes || '',
+          source: newLead.source || 'CRM',
+          created_at: lead.created_at,
+        };
+        const res1 = await client.from('leads').insert([leadPayload]);
         if (res1.error) {
-          await client.from('leads').insert([lead]);
+          await client.from('crm_leads').insert([leadPayload]);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error al crear lead:', e);
       }
     }
   };
@@ -162,12 +232,12 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        const res1 = await client.from('crm_leads').update({ status }).eq('id', id);
+        const res1 = await client.from('leads').update({ status }).eq('id', id);
         if (res1.error) {
-          await client.from('leads').update({ status }).eq('id', id);
+          await client.from('crm_leads').update({ status }).eq('id', id);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error al actualizar estado de lead:', e);
       }
     }
   };
@@ -180,12 +250,16 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        const res1 = await client.from('crm_leads').update(updates).eq('id', id);
+        const updatesWithAlias: any = { ...updates };
+        if (updates.full_name) {
+          updatesWithAlias.name = updates.full_name;
+        }
+        const res1 = await client.from('leads').update(updatesWithAlias).eq('id', id);
         if (res1.error) {
-          await client.from('leads').update(updates).eq('id', id);
+          await client.from('crm_leads').update(updatesWithAlias).eq('id', id);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error al actualizar datos de lead:', e);
       }
     }
   };
@@ -196,33 +270,50 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        const res1 = await client.from('crm_leads').delete().eq('id', id);
+        const res1 = await client.from('leads').delete().eq('id', id);
         if (res1.error) {
-          await client.from('leads').delete().eq('id', id);
+          await client.from('crm_leads').delete().eq('id', id);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error al eliminar lead:', e);
       }
     }
   };
 
-  // Agenda Citas con persistencia
+  // Agenda Citas con persistencia en Supabase (appointments) con UUID
   const handleAddAppointment = async (newApp: Omit<Appointment, 'id' | 'created_at'>) => {
+    const newId = generateUUID();
     const appointment: Appointment = {
       ...newApp,
-      id: `app-${Date.now()}`,
+      id: newId,
       created_at: new Date().toISOString(),
     };
     setAppointments((prev) => [appointment, ...prev]);
 
-    handleUpdateLeadStatus(newApp.lead_id, 'visita');
+    if (newApp.lead_id) {
+      handleUpdateLeadStatus(newApp.lead_id, 'visita');
+    }
 
     const client = getSupabaseClient();
     if (client) {
       try {
-        await client.from('appointments').insert([appointment]);
+        const appPayload = {
+          id: newId,
+          tenant_id: newApp.tenant_id || activeTenant.id,
+          lead_id: newApp.lead_id,
+          property_id: newApp.property_id,
+          title: `Visita ${newApp.visit_type || 'presencial'}`,
+          scheduled_at: newApp.scheduled_at,
+          time_slot: newApp.time_slot,
+          visit_type: newApp.visit_type || 'presencial',
+          type: newApp.visit_type || 'presencial',
+          status: newApp.status || 'programada',
+          notes: newApp.notes || '',
+          created_at: appointment.created_at,
+        };
+        await client.from('appointments').insert([appPayload]);
       } catch (e) {
-        console.error(e);
+        console.error('Error al insertar cita en Supabase:', e);
       }
     }
   };
@@ -237,7 +328,7 @@ export default function App() {
       try {
         await client.from('appointments').update({ status }).eq('id', id);
       } catch (e) {
-        console.error(e);
+        console.error('Error al actualizar estado de cita:', e);
       }
     }
   };
@@ -250,7 +341,7 @@ export default function App() {
       try {
         await client.from('appointments').delete().eq('id', id);
       } catch (e) {
-        console.error(e);
+        console.error('Error al eliminar cita:', e);
       }
     }
   };
@@ -262,7 +353,7 @@ export default function App() {
     setCurrentView('agenda');
   };
 
-  // Captura de lead desde la web pública
+  // Captura de lead desde la web pública con UUID
   const handlePublicLeadSubmit = async (leadData: {
     tenant_id: string;
     full_name: string;
@@ -273,8 +364,9 @@ export default function App() {
     notes: string;
     source: string;
   }) => {
+    const newId = generateUUID();
     const lead: Lead = {
-      id: `lead-pub-${Date.now()}`,
+      id: newId,
       tenant_id: leadData.tenant_id,
       full_name: leadData.full_name,
       phone: leadData.phone,
@@ -291,12 +383,26 @@ export default function App() {
     const client = getSupabaseClient();
     if (client) {
       try {
-        const res1 = await client.from('crm_leads').insert([lead]);
+        const leadPayload = {
+          id: newId,
+          tenant_id: leadData.tenant_id,
+          name: leadData.full_name,
+          full_name: leadData.full_name,
+          phone: leadData.phone,
+          email: leadData.email,
+          status: 'nuevo',
+          budget_pen: Number(leadData.budget_pen) || 0,
+          interested_property_id: leadData.interested_property_id || null,
+          notes: leadData.notes || '',
+          source: leadData.source,
+          created_at: lead.created_at,
+        };
+        const res1 = await client.from('leads').insert([leadPayload]);
         if (res1.error) {
-          await client.from('leads').insert([lead]);
+          await client.from('crm_leads').insert([leadPayload]);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error al registrar lead desde web pública:', e);
       }
     }
   };
@@ -335,8 +441,14 @@ export default function App() {
             leads={leads}
             appointments={appointments}
             onNavigate={setCurrentView}
-            onOpenNewPropertyModal={() => setIsNewPropertyModalOpen(true)}
-            onOpenNewLeadModal={() => setIsNewLeadModalOpen(true)}
+            onOpenNewPropertyModal={() => {
+              setCurrentView('portafolio');
+              setIsNewPropertyModalOpen(true);
+            }}
+            onOpenNewLeadModal={() => {
+              setCurrentView('crm');
+              setIsNewLeadModalOpen(true);
+            }}
           />
         )}
 

@@ -133,8 +133,10 @@ export const CrmCanvasView: React.FC<CrmCanvasViewProps> = ({
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  const tenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
-  const tenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
+  const rawTenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
+  const tenantLeads = rawTenantLeads.length > 0 ? rawTenantLeads : leads;
+  const rawTenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
+  const tenantProperties = rawTenantProperties.length > 0 ? rawTenantProperties : properties;
 
   // Initialize initial default positions for nodes if not set
   useEffect(() => {

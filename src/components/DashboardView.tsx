@@ -44,25 +44,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const tenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
-  const activeProperties = tenantProperties.filter((p) => p.status === 'activa');
+  const displayProperties = tenantProperties.length > 0 ? tenantProperties : properties;
+  const activeProperties = displayProperties.filter((p) => p.status === 'activa');
   
   const tenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
-  const newLeads = tenantLeads.filter((l) => l.status === 'nuevo');
+  const displayLeads = tenantLeads.length > 0 ? tenantLeads : leads;
+  const newLeads = displayLeads.filter((l) => l.status === 'nuevo');
   
   const todayIso = new Date().toISOString().split('T')[0];
   const tenantAppointments = appointments.filter((a) => a.tenant_id === tenant.id);
-  const todayAppointments = tenantAppointments.filter((a) => 
+  const appointmentsToUse = tenantAppointments.length > 0 ? tenantAppointments : appointments;
+  const todayAppointments = appointmentsToUse.filter((a) => 
     (a.scheduled_at === todayIso || a.scheduled_at?.startsWith(todayIso) || a.scheduled_at === '2026-03-28') && a.status === 'programada'
   );
   const displayAppointments = todayAppointments.length > 0 
     ? todayAppointments 
-    : tenantAppointments.filter((a) => a.status === 'programada').slice(0, 4);
+    : appointmentsToUse.filter((a) => a.status === 'programada').slice(0, 4);
 
   const portfolioTotalPEN = activeProperties.reduce((acc, p) => acc + (p.price_pen || 0), 0);
 
   // Arequipa District Distribution
   const districtCounts: Record<string, number> = {};
-  tenantProperties.forEach((p) => {
+  displayProperties.forEach((p) => {
     districtCounts[p.district] = (districtCounts[p.district] || 0) + 1;
   });
 

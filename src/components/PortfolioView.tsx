@@ -42,9 +42,9 @@ const AREQUIPA_DISTRICTS = [
 ];
 
 const PRESET_IMAGES = [
-  { label: 'Torre Cayma (Vista al Misti)', url: '/src/assets/images/prop_cayma_departamento_1793163597170.jpg' },
-  { label: 'Casona Sillar Yanahuara', url: '/src/assets/images/prop_yanahuara_casa_1793163597657.jpg' },
-  { label: 'Villa Cerro Colorado (Piscina)', url: '/src/assets/images/prop_cerro_colorado_residencia_1793163598104.jpg' },
+  { label: 'Torre Cayma (Vista al Misti)', url: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Casona Sillar Yanahuara', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80' },
+  { label: 'Villa Cerro Colorado (Piscina)', url: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&auto=format&fit=crop&q=80' },
 ];
 
 export const PortfolioView: React.FC<PortfolioViewProps> = ({
@@ -58,6 +58,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   setIsNewModalOpen,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('todos');
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterDistrict, setFilterDistrict] = useState<string>('todos');
@@ -84,9 +86,10 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   });
 
   const tenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
+  const propsToDisplay = tenantProperties.length > 0 ? tenantProperties : properties;
 
   // Filtered properties
-  const filteredProperties = tenantProperties.filter((p) => {
+  const filteredProperties = propsToDisplay.filter((p) => {
     if (filterType !== 'todos' && p.property_type !== filterType) return false;
     if (filterStatus !== 'todos' && p.status !== filterStatus) return false;
     if (filterDistrict !== 'todos' && p.district !== filterDistrict) return false;
@@ -146,28 +149,38 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     setIsNewModalOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim() || !formData.address.trim()) return;
 
     const autoSlug = formData.slug.trim() || formData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-    if (editingProperty) {
-      onUpdateProperty(editingProperty.id, {
-        ...formData,
-        slug: autoSlug,
-      });
-    } else {
-      onAddProperty({
-        tenant_id: tenant.id,
-        ...formData,
-        slug: autoSlug,
-        currency: 'PEN',
-        gallery_urls: [formData.image_url],
-      });
-    }
+    setIsSubmitting(true);
+    try {
+      if (editingProperty) {
+        await onUpdateProperty(editingProperty.id, {
+          ...formData,
+          slug: autoSlug,
+        });
+        setSuccessToast('Inmueble actualizado con éxito');
+      } else {
+        await onAddProperty({
+          tenant_id: tenant.id,
+          ...formData,
+          slug: autoSlug,
+          currency: 'PEN',
+          gallery_urls: [formData.image_url],
+        });
+        setSuccessToast('Inmueble publicado con éxito en el portafolio y catálogo web');
+      }
 
-    setIsNewModalOpen(false);
+      setTimeout(() => setSuccessToast(null), 3500);
+      setIsNewModalOpen(false);
+    } catch (err) {
+      console.error('Error al guardar inmueble:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -185,6 +198,22 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Toast de confirmación de publicación */}
+      {successToast && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs px-4 py-3 rounded-xl flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successToast}</span>
+          </div>
+          <button
+            onClick={() => setSuccessToast(null)}
+            className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Header con enlace público generado */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
         <div>
@@ -640,9 +669,17 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition cursor-pointer shadow-xs"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-lg transition cursor-pointer shadow-xs flex items-center gap-2"
                 >
-                  {editingProperty ? 'Guardar Cambios' : 'Crear y Publicar Inmueble'}
+                  {isSubmitting && (
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  )}
+                  <span>
+                    {editingProperty 
+                      ? (isSubmitting ? 'Guardando...' : 'Guardar Cambios') 
+                      : (isSubmitting ? 'Publicando...' : 'Crear y Publicar Inmueble')}
+                  </span>
                 </button>
               </div>
             </form>

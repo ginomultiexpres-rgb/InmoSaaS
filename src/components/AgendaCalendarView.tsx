@@ -38,24 +38,28 @@ export const AgendaCalendarView: React.FC<AgendaCalendarViewProps> = ({
   preselectedLeadId,
   preselectedPropertyId,
 }) => {
-  const [selectedDate, setSelectedDate] = useState<string>('2026-03-28');
+  const todayIso = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
   const [isModalOpen, setIsModalOpen] = useState(Boolean(preselectedLeadId));
 
   // Form State
   const [formLeadId, setFormLeadId] = useState(preselectedLeadId || '');
   const [formPropertyId, setFormPropertyId] = useState(preselectedPropertyId || '');
-  const [formDate, setFormDate] = useState('2026-03-28');
-  const [formTimeSlot, setFormTimeSlot] = useState('16:00');
+  const [formDate, setFormDate] = useState(todayIso);
+  const [formTimeSlot, setFormTimeSlot] = useState('10:30 AM');
   const [formVisitType, setFormVisitType] = useState<VisitType>('presencial');
   const [formNotes, setFormNotes] = useState('');
 
-  const tenantAppointments = appointments.filter((a) => a.tenant_id === tenant.id);
-  const tenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
-  const tenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
+  const rawTenantAppointments = appointments.filter((a) => a.tenant_id === tenant.id);
+  const tenantAppointments = rawTenantAppointments.length > 0 ? rawTenantAppointments : appointments;
+  const rawTenantLeads = leads.filter((l) => l.tenant_id === tenant.id);
+  const tenantLeads = rawTenantLeads.length > 0 ? rawTenantLeads : leads;
+  const rawTenantProperties = properties.filter((p) => p.tenant_id === tenant.id);
+  const tenantProperties = rawTenantProperties.length > 0 ? rawTenantProperties : properties;
 
   // Group appointments by date
   const appointmentsForSelectedDate = tenantAppointments
-    .filter((a) => a.scheduled_at === selectedDate)
+    .filter((a) => a.scheduled_at === selectedDate || (!tenantAppointments.some(x => x.scheduled_at === selectedDate) && a.status === 'programada'))
     .sort((a, b) => a.time_slot.localeCompare(b.time_slot));
 
   // Generate 7-day quick calendar bar around the target date
